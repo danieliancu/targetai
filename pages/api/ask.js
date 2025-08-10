@@ -1,5 +1,8 @@
 // pages/api/ask.js
 import OpenAI from "openai";
+import fs from "fs/promises";
+import path from "path";
+
 import { normalizeDateWindow, parseLooseDate } from "../../lib/dates.js";
 import {
   fetchProducts,
@@ -15,6 +18,66 @@ import {
   isRefresherMatch,
 } from "../../lib/abbreviations.js";
 
+/* =========================
+   KB: course_kb.json support
+   ========================= */
+const COURSE_KB_PATH =
+  process.env.COURSE_KB_PATH || path.join(process.cwd(), "data/course_kb.json");
+
+let __COURSE_KB = null;
+let __COURSE_KB_MTIME = 0;
+
+async function loadCourseKB() {
+  try {
+    const stat = await fs.stat(COURSE_KB_PATH);
+    if (!__COURSE_KB || stat.mtimeMs !== __COURSE_KB_MTIME) {
+      const raw = await fs.readFile(COURSE_KB_PATH, "utf-8");
+      __COURSE_KB = JSON.parse(raw);
+      __COURSE_KB_MTIME = stat.mtimeMs;
+      console.log("[ask] course_kb.json (re)loaded:", COURSE_KB_PATH);
+    }
+    return __COURSE_KB;
+  } catch (err) {
+    console.error("[ask] Failed to load course_kb.json:", err?.message || err);
+    return { version: "0", courses: [] };
+  }
+}
+
+function _norm(s = "") {
+  return String(s).toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function kbMatchCourse(kb, termRaw) {
+  const term = _norm(termRaw || "");
+  if (!term) return null;
+  for (const c of kb.courses || []) {
+    const hay = [c.id, c.title, ...(Array.isArray(c.aliases) ? c.aliases : [])]
+      .filter(Boolean)
+      .map(_norm);
+    if (hay.some((h) => h.includes(term) || term.includes(h))) return c;
+  }
+  return null;
+}
+
+function kbPickFields(course, fields = []) {
+  if (!fields?.length) return course;
+  const out = {};
+  for (const f of fields) {
+    if (f === "exam" && course?.assessment?.exam) out.exam = course.assessment.exam;
+    else if (f === "pass_mark" && course?.assessment?.exam?.pass_mark_percent != null)
+      out.pass_mark = course.assessment.exam.pass_mark_percent;
+    else if (f === "attendance") out.attendance_required = course.attendance_required ?? null;
+    else if (f in course) out[f] = course[f];
+    else if (course.certificate && f in course.certificate) {
+      out.certificate = { ...(out.certificate || {}), [f]: course.certificate[f] };
+    }
+  }
+  return out;
+}
+
+/* =========================
+   MODEL + PROMPT
+   ========================= */
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const SYSTEM_PROMPT = `
@@ -32,8 +95,13 @@ You are a concise, proactive sales agent for construction training courses.
 
 Tool usage policy:
 - When calling search_courses, always pass rawQuery with the user's latest message content to help the server detect nuances (e.g., "refresher").
+- Do not format course suggestions yourself. Always call "search_courses"; the server will render results as cards.
+- Never answer course facts (duration, exam, pass marks, certificate, delivery, prerequisites, attendance) from your own knowledge. Always call "course_info" and use only the tool result.
 `;
 
+/* =========================
+   TOOLS
+   ========================= */
 const TOOLS = [
   {
     type: "function",
@@ -65,14 +133,51 @@ const TOOLS = [
       },
     },
   },
+  // NEW: KB tool for course content Q&A
+  {
+    type: "function",
+    function: {
+      name: "course_info",
+      description:
+        "Return structured facts about a course (content, duration, assessment/exam, pass mark, certificate validity, prerequisites, delivery).",
+      parameters: {
+        type: "object",
+        properties: {
+          courseTerm: { type: "string", description: "User's course name or abbreviation (e.g., SMSTS, SSSTS Refresher)." },
+          fields: {
+            type: "array",
+            description: "Optional list of specific fields to return.",
+            items: {
+              type: "string",
+              enum: [
+                "duration_days",
+                "overview",
+                "topics",
+                "certificate",
+                "assessment",
+                "exam",
+                "pass_mark",
+                "delivery",
+                "prerequisites",
+                "attendance",
+                "booking_notes",
+              ],
+            },
+          },
+        },
+        required: ["courseTerm"],
+      },
+    },
+  },
 ];
 
 function safeJSONParse(str, fallback = {}) {
   try { return JSON.parse(str); } catch { return fallback; }
 }
 
-/* ---------- Helpers ---------- */
-
+/* =========================
+   Helpers (existing + minor)
+   ========================= */
 function cleanQuery(s = "") {
   return String(s)
     .replace(/\b(and|also|pls|please|hi|hello)\b/gi, " ")
@@ -86,8 +191,16 @@ function baseCourseTitle(full) {
   return String(full).split("|")[0].trim();
 }
 
-/* ---------- HTML renderers (card UI) ---------- */
+function isBookingIntent(t = "") {
+  const s = String(t).toLowerCase();
+  return /\b(book|booking|cheapest|price|cost|availability|spaces|options|next week|next month|dates|schedule|when|where|location|venue)\b/.test(s);
+}
+function isCourseInfoIntent(t = "") {
+  const s = String(t).toLowerCase();
+  return /\b(pass mark|passing score|exam|assessment|duration|certificate|valid|validity|prerequisite|attendance|topics|content|open[- ]?book|delivery)\b/.test(s);
+}
 
+/* ---------- HTML renderers (card UI) ---------- */
 function escapeHtml(s = "") {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -96,20 +209,19 @@ function escapeHtml(s = "") {
 }
 
 function normalizeDatesText(s = "") {
-  // în JSON uneori vine cu "...\n..." (escape) sau newline real
   return String(s)
-    .replace(/\\n/g, "<br>")  // backslash-n literal
-    .replace(/\n/g, "<br>");  // newline real
+    .replace(/\\n/g, "<br>")
+    .replace(/\n/g, "<br>");
 }
 
 function renderCardsHTML(items) {
   const cards = items.map(it => {
     const titleOnly = baseCourseTitle(it.title || "");
     const title = escapeHtml(titleOnly);
-    const dates = normalizeDatesText(it.dates || ""); // <-- aici
+    const dates = normalizeDatesText(it.dates || "");
     const venue = escapeHtml(it.venueOrFormat || "Venue TBC");
     const price = escapeHtml(`£${it.price ?? ""}`);
-    const spaces = escapeHtml(String(it.spaces ?? ""));
+    const spaces = escapeHtml(String(it.spaces ?? "")); 
     const link = String(it.link || "#");
 
     return `
@@ -204,7 +316,6 @@ function renderDiagnosticsZeroHTML({ courseTerm, dateLabel, locationLabel, diag 
 }
 
 /* ---------- Precise in-file search when QC is valid ---------- */
-
 function matchLocation(userLocation, productName) {
   if (!userLocation) return true;
   const facet = detectLocationFacet(productName);
@@ -257,8 +368,9 @@ function searchPrecisely(products, { normalizedFamily, refresherRequested, locat
   return filtered.map(mapItem);
 }
 
-/* ---------- Tool router ---------- */
-
+/* =========================
+   Tool router (extended)
+   ========================= */
 async function toolRouter(tc) {
   const call = tc.function;
 
@@ -319,11 +431,145 @@ async function toolRouter(tc) {
     };
   }
 
+  // NEW: KB Q&A
+  if (call.name === "course_info") {
+    const { courseTerm, fields = [] } = safeJSONParse(call.arguments || "{}", {});
+    const kb = await loadCourseKB();
+    const found = kbMatchCourse(kb, courseTerm);
+    if (!found) {
+      return { found: false, error: `No course matched "${courseTerm}".` };
+    }
+    const payload = kbPickFields(found, fields);
+    return { found: true, id: found.id, title: found.title, course: payload };
+  }
+
   throw new Error(`Unknown tool: ${call.name}`);
 }
 
-/* ---------- API handler ---------- */
+/* =========================
+   Fallbacks server-side
+   ========================= */
+function renderCourseInfoHTML({ id, title, course }) {
+  const lines = [];
 
+  const hdr = `<h3 class="course-title">${escapeHtml(title || id)}</h3>`;
+  lines.push(hdr);
+
+  const bullets = [];
+
+  if (course.duration_days != null) bullets.push(`<li><strong>Duration:</strong> ${course.duration_days} day(s)</li>`);
+  if (Array.isArray(course.delivery) && course.delivery.length)
+    bullets.push(`<li><strong>Delivery:</strong> ${escapeHtml(course.delivery.join(", "))}</li>`);
+  if (course.attendance_required != null)
+    bullets.push(`<li><strong>Attendance:</strong> ${course.attendance_required ? "Required" : "Not required"}</li>`);
+  if (Array.isArray(course.prerequisites) && course.prerequisites.length)
+    bullets.push(`<li><strong>Prerequisites:</strong> ${escapeHtml(course.prerequisites.join("; "))}</li>`);
+  if (course.overview) bullets.push(`<li><strong>Overview:</strong> ${escapeHtml(course.overview)}</li>`);
+
+  const ex = course.exam || course.assessment?.exam;
+  if (ex) {
+    const examBits = [];
+    if (ex.duration_minutes != null) examBits.push(`${ex.duration_minutes} min`);
+    if (ex.questions) {
+      const parts = [];
+      if (ex.questions.multiple_choice != null) parts.push(`${ex.questions.multiple_choice} MCQ`);
+      if (ex.questions.short_answer != null) parts.push(`${ex.questions.short_answer} short-answer`);
+      if (ex.questions.free_text != null) parts.push(`${ex.questions.free_text} free-text`);
+      if (!parts.length && ex.questions.total != null) parts.push(`${ex.questions.total} questions`);
+      examBits.push(parts.join(", "));
+    }
+    if (ex.open_book === true || ex.open_book === false || ex.open_book?.allowed_last_minutes != null) {
+      const ob = ex.open_book?.allowed_last_minutes != null
+        ? `open-book in the last ${ex.open_book.allowed_last_minutes} min${ex.open_book.materials ? ` (allowed: ${escapeHtml(ex.open_book.materials.join(", "))})` : ""}`
+        : (ex.open_book ? "open-book" : "closed-book");
+      examBits.push(ob);
+    }
+    if (ex.pass_mark_percent != null) examBits.push(`pass mark ${ex.pass_mark_percent}%`);
+    bullets.push(`<li><strong>Assessment:</strong> ${escapeHtml(examBits.join(" • "))}</li>`);
+  }
+
+  if (course.certificate) {
+    const certBits = [];
+    if (course.certificate.valid_years != null) certBits.push(`valid ${course.certificate.valid_years} years`);
+    if (course.certificate.renewal_course) certBits.push(`renewal via ${escapeHtml(course.certificate.renewal_course)}`);
+    if (course.certificate.issue_time_weeks) certBits.push(`issued in ${escapeHtml(course.certificate.issue_time_weeks)} weeks`);
+    if (certBits.length) bullets.push(`<li><strong>Certificate:</strong> ${certBits.join(" • ")}</li>`);
+  }
+
+  if (Array.isArray(course.topics) && course.topics.length)
+    bullets.push(`<li><strong>Topics:</strong> ${escapeHtml(course.topics.join(", "))}</li>`);
+  if (Array.isArray(course.booking_notes) && course.booking_notes.length)
+    bullets.push(`<li><strong>Notes:</strong> ${escapeHtml(course.booking_notes.join("; "))}</li>`);
+
+  if (bullets.length) {
+    lines.push(`<ul class="course-facts">${bullets.join("")}</ul>`);
+  } else {
+    lines.push(`<p>No additional details found for this course.</p>`);
+  }
+
+  return `<div class="course-info">${lines.join("")}</div>`;
+}
+
+async function forceCourseInfoIfNeeded(message, toolResults) {
+  if (toolResults["course_info"]) return null;        // deja avem
+  if (!isCourseInfoIntent(message)) return null;      // nu e întrebare de conținut
+
+  const kb = await loadCourseKB();
+  const found = kbMatchCourse(kb, message);
+  if (!found) return { reply: "I couldn't identify the course in your question. Which course do you mean?" };
+
+  // Dacă e întrebare de tip pass mark, extragem strict acele câmpuri; altfel, returnăm un rezumat util
+  const wantsPassMark = /\b(pass mark|passing score)\b/i.test(message);
+  const payload = wantsPassMark
+    ? kbPickFields(found, ["pass_mark", "exam"])
+    : kbPickFields(found, ["duration_days","delivery","attendance","prerequisites","overview","exam","certificate","topics","booking_notes"]);
+
+  // Mic răspuns scurt dacă e doar pass mark
+  const pm = payload.pass_mark ?? payload.exam?.pass_mark_percent;
+  if (wantsPassMark && pm != null) {
+    const reply = `**${found.title}** pass mark: **${pm}%**.`;
+    return { reply, format: "cards", toolResults: { ...toolResults, course_info: { found: true, id: found.id } } };
+  }
+
+  const html = renderCourseInfoHTML({ id: found.id, title: found.title, course: payload });
+  return { reply: html, format: "cards", toolResults: { ...toolResults, course_info: { found: true, id: found.id } } };
+}
+
+async function forceSearchIfNeeded(message, toolResults) {
+  if (toolResults["search_courses"]) return null;
+  if (!isBookingIntent(message)) return null;
+
+  const endpoint = process.env.PRODUCTS_ENDPOINT;
+  if (!endpoint) return null;
+
+  const products = await fetchProducts(endpoint);
+
+  const rq = cleanQuery(message || "");
+  const qc = validateCourseQuery(rq);
+  if (qc.exists === false) return null;
+
+  const dateRange = normalizeDateWindow(rq || "");
+  const derivedLoc = detectUserLocationFromText(rq || "");
+  const effectiveLocation = (derivedLoc !== null) ? derivedLoc : null;
+
+  const items = searchPrecisely(products, {
+    normalizedFamily: qc.normalizedFamily || qc.recognizedFamily || null,
+    refresherRequested: qc.refresherRequested,
+    location: effectiveLocation,
+    dateRange,
+  });
+
+  if (!items.length) return null;
+
+  const locationLabel = derivedLoc || "";
+  const dateLabel = dateRange.label || "";
+  const reply = renderResultsHTML({ items, dateLabel, locationLabel });
+  return { reply, format: "cards", toolResults: { ...toolResults, search_courses: { count: items.length } } };
+}
+
+/* =========================
+   API handler
+   ========================= */
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
@@ -361,6 +607,18 @@ export default async function handler(req, res) {
 
       const toolCalls = assistantMsg.tool_calls || [];
       if (toolCalls.length === 0) {
+        // Fallback 1: forțează course_info dacă e întrebare de conținut
+        const forcedInfo = await forceCourseInfoIfNeeded(message, toolResults);
+        if (forcedInfo) {
+          return res.status(200).json(forcedInfo);
+        }
+        // Fallback 2: forțează search dacă pare intenție de booking/listing
+        const forcedSearch = await forceSearchIfNeeded(message, toolResults);
+        if (forcedSearch) {
+          return res.status(200).json(forcedSearch);
+        }
+
+        // Altfel, returnăm conținutul „așa cum e”
         return res.status(200).json({ reply: assistantMsg.content || "I couldn't generate a reply.", toolResults });
       }
 
@@ -370,6 +628,7 @@ export default async function handler(req, res) {
         msgs.push({ role: "tool", tool_call_id: tc.id, name: tc.function.name, content: JSON.stringify(result) });
       }
 
+      // Prefer rendering search results (existing behavior)
       const lastSearch = toolResults["search_courses"];
       if (lastSearch) {
         let latestUser = "";
@@ -385,12 +644,12 @@ export default async function handler(req, res) {
           const reply = (qc.reason === "variant_not_offered")
             ? renderVariantNotOfferedHTML({ recognizedFamily: qc.recognizedFamily, suggestions: qc.suggestions })
             : renderMissingFamilyHTML({ suggestions: qc.suggestions });
-          return res.status(200).json({ reply, toolResults });
+          return res.status(200).json({ reply, format: "cards", toolResults });
         }
 
         if (items.length > 0) {
           const reply = renderResultsHTML({ items, dateLabel, locationLabel });
-          return res.status(200).json({ reply, toolResults });
+          return res.status(200).json({ reply, format: "cards", toolResults });
         }
 
         const label = (qc && (qc.normalizedFamily || qc.recognizedFamily)) || "your requested course";
@@ -401,13 +660,22 @@ export default async function handler(req, res) {
             locationLabel,
             diag: lastSearch.diagnostics,
           });
-          return res.status(200).json({ reply, toolResults });
+          return res.status(200).json({ reply, format: "cards", toolResults });
         } else {
           const askedRefresher = /\brefresher\b/i.test(cleanQuery(latestUser));
           const reply = renderZeroResultsHTML({ dateLabel, locationLabel, askedRefresher });
-          return res.status(200).json({ reply, toolResults });
+          return res.status(200).json({ reply, format: "cards", toolResults });
         }
       }
+
+      // Dacă nu s-a chemat search_courses dar avem course_info → afișăm KB info
+      const kbInfo = toolResults["course_info"];
+      if (kbInfo && kbInfo.found) {
+        const reply = renderCourseInfoHTML({ id: kbInfo.id, title: kbInfo.title, course: kbInfo.course });
+        return res.status(200).json({ reply, format: "cards", toolResults });
+      }
+
+      // Otherwise, continue the loop for another round of tool calls
     }
 
     return res.status(200).json({ reply: "I reached the tool-call limit. Please refine your query.", toolResults });

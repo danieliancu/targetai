@@ -1,0 +1,397 @@
+{
+  "version": "1.0",
+  "updated_at": "2025-08-10T13:52:34.057944Z",
+  "source": "User-provided ODT summary (json.odt)",
+  "courses": [
+    {
+      "id": "SMSTS",
+      "title": "CITB Site Management Safety Training Scheme (SMSTS)",
+      "aliases": [
+        "SMSTS",
+        "Site Management Safety Training Scheme"
+      ],
+      "duration_days": 5,
+      "audience": [
+        "Site managers",
+        "Project leaders",
+        "Anyone managing groups on construction sites"
+      ],
+      "overview": "Five-day course for site managers covering health and safety legislation, guidance and best practice. Leads to CITB certification.",
+      "topics": [
+        "Health and Safety at Work Act 1974",
+        "Management of Health & Safety at Work Regulations 1999",
+        "RIDDOR 2013",
+        "CDM Regulations 2015",
+        "Working at Height Regulations 2005",
+        "Provision & Use of Work Equipment 1998",
+        "Regulatory Reform (Fire Safety) Order 2005",
+        "Control of Asbestos Regulations 2012",
+        "Scaffolding, Confined Spaces, Electricity, Excavations"
+      ],
+      "certificate": {
+        "valid_years": 5,
+        "renewal_course": "SMSTS Refresher",
+        "issue_time_weeks": "2–3"
+      },
+      "assessment": {
+        "workbook": "XA6 SMSTS Workbook",
+        "exam": {
+          "duration_minutes": 35,
+          "questions": {
+            "total": 25,
+            "multiple_choice": 18,
+            "short_answer": 7
+          },
+          "open_book": {
+            "allowed_last_minutes": 15,
+            "materials": [
+              "SMSTS (GE700)",
+              "XA6 workbook"
+            ]
+          },
+          "pass_mark_percent": 81
+        }
+      },
+      "attendance_required": true,
+      "delivery": [
+        "Online",
+        "Classroom"
+      ],
+      "prerequisites": [
+        "Sufficient level of English (CITB requirement)"
+      ],
+      "booking_notes": [
+        "Joining Instructions emailed after booking",
+        "Bring photographic ID (passport or driving licence)",
+        "Initial Assessment to be completed via link"
+      ]
+    },
+    {
+      "id": "SMSTS Refresher",
+      "title": "CITB SMSTS Refresher",
+      "aliases": [
+        "SMSTS Refresher"
+      ],
+      "duration_days": 2,
+      "audience": [
+        "Existing SMSTS certificate holders (managers, directors, surveyors)"
+      ],
+      "overview": "Two-day refresher reinforcing legislation, guidance and best practice.",
+      "topics": [
+        "Current HSE focus",
+        "Risk assessments and method statements",
+        "Construction site health, safety and welfare",
+        "RIDDOR",
+        "Behavioural safety",
+        "Occupational health",
+        "Legislation updates affecting construction"
+      ],
+      "certificate": {
+        "valid_years": 5,
+        "issue_time_weeks": "2–3"
+      },
+      "assessment": {
+        "workbook": "XA6 SMSTS Workbook",
+        "exam": {
+          "duration_minutes": 35,
+          "questions": {
+            "total": 25,
+            "multiple_choice": 18,
+            "short_answer": 7
+          },
+          "open_book": {
+            "allowed_last_minutes": 15,
+            "materials": [
+              "SMSTS (GE700)",
+              "XA6 workbook"
+            ]
+          },
+          "pass_mark_percent": 81
+        }
+      },
+      "attendance_required": true,
+      "delivery": [
+        "Online",
+        "Classroom"
+      ],
+      "prerequisites": [
+        "Existing valid SMSTS certificate",
+        "Sufficient English (CITB)"
+      ]
+    },
+    {
+      "id": "SSSTS",
+      "title": "CITB Site Supervisor Safety Training Scheme (SSSTS)",
+      "aliases": [
+        "SSSTS",
+        "Site Safety Supervisor Training Scheme"
+      ],
+      "duration_days": 2,
+      "audience": [
+        "Supervisors or those moving into supervisory roles"
+      ],
+      "overview": "Two-day course for supervisors; no prior qualifications required.",
+      "topics": [
+        "Health and safety law for supervisors",
+        "Supervisory responsibilities in controlling site safety",
+        "Risk assessments and method statements",
+        "Site inductions, toolbox talks, briefings",
+        "Monitoring activities and intervening on bad practice"
+      ],
+      "certificate": {
+        "valid_years": 5,
+        "issue_time_weeks": "2–3"
+      },
+      "assessment": {
+        "exam": {
+          "duration_minutes": 30,
+          "questions": {
+            "total": 26,
+            "multiple_choice": 22,
+            "safety_critical": 4
+          },
+          "open_book": {
+            "allowed_last_minutes": 10,
+            "materials": [
+              "GE706"
+            ]
+          },
+          "pass_mark_percent": 80
+        }
+      },
+      "attendance_required": true,
+      "delivery": [
+        "Online",
+        "Classroom"
+      ],
+      "prerequisites": [
+        "Sufficient English (CITB)"
+      ]
+    },
+    {
+      "id": "SSSTS Refresher",
+      "title": "CITB SSSTS Refresher",
+      "aliases": [
+        "SSSTS Refresher"
+      ],
+      "duration_days": 1,
+      "audience": [
+        "Existing SSSTS certificate holders"
+      ],
+      "overview": "One-day refresher, must be taken before SSSTS certificate expiry.",
+      "topics": [
+        "Structure of health and safety law",
+        "Supervisor role vs manager role",
+        "Method statements",
+        "Construction site health, safety and welfare",
+        "Communication routes in site activity",
+        "Behavioural safety",
+        "Supervision of occupational health"
+      ],
+      "certificate": {
+        "valid_years": 5,
+        "issue_time_weeks": "2–3"
+      },
+      "assessment": {
+        "exam": {
+          "duration_minutes": 30,
+          "questions": {
+            "total": 26,
+            "multiple_choice": 22,
+            "safety_critical": 4
+          },
+          "open_book": {
+            "allowed_last_minutes": 10,
+            "materials": [
+              "GE706"
+            ]
+          },
+          "pass_mark_percent": 80
+        }
+      },
+      "attendance_required": true,
+      "delivery": [
+        "Online",
+        "Classroom"
+      ],
+      "prerequisites": [
+        "Valid SSSTS certificate",
+        "Sufficient English (CITB)"
+      ]
+    },
+    {
+      "id": "HSA",
+      "title": "CITB Health and Safety Awareness",
+      "aliases": [
+        "HSA",
+        "Health & Safety Awareness"
+      ],
+      "duration_days": 1,
+      "audience": [
+        "New/aspiring construction workers with little to no experience"
+      ],
+      "overview": "One-day course providing basics of health and safety, employer roles, and safe work on site.",
+      "topics": [
+        "Individual responsibilities for safety",
+        "Typical construction hazards and controls",
+        "Practical standards of safety on site",
+        "Legal requirements and liabilities",
+        "Working at height",
+        "Manual handling",
+        "Fire prevention",
+        "Work equipment",
+        "Occupational health"
+      ],
+      "certificate": {
+        "valid_years": 2
+      },
+      "assessment": {
+        "exam": {
+          "duration_minutes": 30,
+          "questions": {
+            "total": 25,
+            "multiple_choice": 25
+          },
+          "pass_mark_percent": 83
+        }
+      },
+      "attendance_required": true,
+      "delivery": [
+        "Online"
+      ],
+      "prerequisites": [
+        "Adequate IT + laptop/PC with mic & camera (not iPad/mobile)",
+        "Sufficient English (CITB)"
+      ],
+      "booking_notes": [
+        "Zoom link emailed 6pm before course; check Junk",
+        "Log on at 8:00; course starts 8:30",
+        "Complete Delegate Information Form via link"
+      ]
+    },
+    {
+      "id": "TWC",
+      "title": "CITB Temporary Works Coordinator (TWC)",
+      "aliases": [
+        "TWC",
+        "Temporary Works Coordinator"
+      ],
+      "duration_days": 2,
+      "audience": [
+        "Those managing all forms of temporary works"
+      ],
+      "overview": "Covers processes involved in temporary works and the role of the TWC. Focus on BS5975 and management.",
+      "topics": [
+        "Temporary works overview and statutory aspects",
+        "Roles and duties of the TWC and others",
+        "BS5975 code of best practice",
+        "Risk assessments and method statements",
+        "Management of the temporary works process",
+        "4Cs: communication, co‑operation, co‑ordination, competency"
+      ],
+      "certificate": {
+        "valid_years": 5,
+        "issue_time_weeks": "2–3"
+      },
+      "assessment": {
+        "exam": {
+          "duration_minutes": 45,
+          "questions": {
+            "total": 22,
+            "multiple_choice": 18,
+            "free_text": 4
+          },
+          "open_book": true,
+          "pass_mark_percent": 78
+        }
+      },
+      "attendance_required": true,
+      "delivery": [
+        "Online",
+        "Classroom"
+      ],
+      "prerequisites": [
+        "Sufficient English (CITB)"
+      ]
+    },
+    {
+      "id": "TWC Refresher",
+      "title": "CITB TWC Refresher",
+      "aliases": [
+        "TWC Refresher",
+        "Temporary Works Coordinator Refresher"
+      ],
+      "duration_days": 1,
+      "audience": [
+        "Holders of an existing TWC certificate"
+      ],
+      "overview": "Updates on BS 5975:2019, documentation, risk management and legislation.",
+      "topics": [
+        "Temporary works procedures (BS 5975:2019)",
+        "Risk management re: BS 5975:2019",
+        "TWC roles, responsibilities, documentation",
+        "RAMS and current legislation",
+        "4Cs and coordination in temporary works"
+      ],
+      "certificate": {
+        "valid_years": 5,
+        "issue_time_weeks": "2–3"
+      },
+      "assessment": {
+        "exam": {
+          "duration_minutes": 45,
+          "open_book": true,
+          "pass_mark_percent": 78
+        }
+      },
+      "attendance_required": true,
+      "delivery": [
+        "Online",
+        "Classroom"
+      ],
+      "prerequisites": [
+        "Valid TWC certificate",
+        "Sufficient English (CITB)"
+      ]
+    },
+    {
+      "id": "TWS",
+      "title": "CITB Temporary Works Supervisor (TWS)",
+      "aliases": [
+        "TWS",
+        "Temporary Works Supervisor"
+      ],
+      "duration_days": 1,
+      "audience": [
+        "Those supervising temporary works on site"
+      ],
+      "overview": "Understanding BS5975, risk management, 4Cs, legislation. No prior qualifications required.",
+      "topics": [
+        "Relevant aspects of BS5975",
+        "Risk management of temporary works",
+        "4Cs: communication, co‑operation, co‑ordination, competency",
+        "Current legislation",
+        "Case studies"
+      ],
+      "certificate": {
+        "valid_years": 5,
+        "issue_time_weeks": "2–3"
+      },
+      "assessment": {
+        "exam": {
+          "duration_minutes": 45,
+          "open_book": true,
+          "pass_mark_percent": 78
+        }
+      },
+      "attendance_required": true,
+      "delivery": [
+        "Online",
+        "Classroom"
+      ],
+      "prerequisites": [
+        "Sufficient English (CITB)"
+      ]
+    }
+  ]
+}
