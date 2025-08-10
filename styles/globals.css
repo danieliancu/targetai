@@ -1,42 +1,125 @@
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');
 
 * {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
+  font-family: 'Poppins', sans-serif;
 }
 
-a {
-  color: inherit;
+
+
+/* Layout */
+.wrap { max-width: 920px; margin: 40px auto; padding: 0 16px; }
+.chat { min-height: 60vh; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fafafa; overflow-y: auto; }
+.bubble { max-width: 80%; padding: 10px 12px; margin: 8px 0; border-radius: 10px; }
+.bubble.assistant {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  max-width: 100%;
+  padding: 20px;              /* <- crește padding-ul */
+  white-space: normal;        /* nu păstra \n ca spații uriașe */
+}
+.bubble.user { background:lightblue; display: flex;justify-content: flex-end;     margin: 20px 0; max-width: 100%;justify-content: flex-end; text-align:right}
+
+/* Fixed composer at bottom */
+.composer-bar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: #ffffffcc; /* translucent white */
+  backdrop-filter: blur(8px);
+  border-top: 1px solid #e5e7eb;
+  padding: 10px 0;
+  z-index: 1000;
+}
+.composer-inner {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  gap: 8px;
+}
+.composer-inner textarea {
+  flex: 1;
+  height: 22px;
+  resize: vertical;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font: inherit;
+  overflow: hidden;
+  outline:none;
+}
+.composer-inner button {
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid lightblue;
+  background: lightblue;
+  height: 44px;
+  cursor: pointer;
+}
+.composer-inner button:disabled { opacity: 0.5; cursor: default; }
+
+/* Cards */
+.result-header { margin: 4px 0 12px; font-weight: 500; }
+
+/* Grila de carduri — coloane fluide + spațiu mai generos */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* col. responsive */
+  column-gap: 14px;     /* <- spațiu orizontal mai mare */
+  row-gap: 46px;        /* <- spațiu vertical mai mare */
+  align-items: stretch; /* cardurile se întind egal pe înălțime */
+  margin-bottom: 30px; /* spațiu sub grilă */
+}
+@media (min-width: 640px) {
+  .cards-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (min-width: 960px) {
+  .cards-grid { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+/* Cardul — flex col; buton jos */
+.course-card {
+  color: white;
+  border-radius: 10px;
+  padding: 16px;            /* puțin mai mult padding în card */
+  background: #3750A4;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.course-title {
+  margin: 0 0 6px;
+  font-size: .85rem;
+  line-height: 1.3;
+  color: orange;
+}
+/* Meta info */
+.course-meta {
+  display: grid;
+  gap: 6px;                 /* un pic mai mult spațiu între linii */
+  font-size: .85rem;
+}
+/* Butonul — tot timpul jos + lățime completă (opțional) */
+.book-btn {
+  margin-top: auto;         /* împinge la baza cardului */
+  display: inline-block;
+  align-self: stretch;      /* întinde pe lățimea cardului */
+  text-align: center;
+  padding: 10px 12px;
+  background: #e77b1b;
+  color: #fff;
+  border-radius: 8px;
   text-decoration: none;
+  font-weight: 600;
 }
+.book-btn:hover { background: orange }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+/* Small helpers */
+.tips { margin: 8px 0 0 18px; }
+.tips li { margin: 2px 0; }
+
+
+
+.book-btn {
+  margin-top: auto;        /* <-- împinge butonul la baza cardului */
+  text-align: center;
 }

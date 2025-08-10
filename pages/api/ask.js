@@ -3,7 +3,6 @@ import OpenAI from "openai";
 import { normalizeDateWindow, parseLooseDate } from "../../lib/dates.js";
 import {
   fetchProducts,
-  // searchCoursesInMemory,  // evităm pentru cazurile cu Refresher, facem filtrarea corectă aici
   detectUserLocationFromText,
   diagnoseSearch,
   withinRange,
@@ -24,10 +23,10 @@ You are a concise, proactive sales agent for construction training courses.
 - Do NOT reuse a previous location or date unless the user repeats or clearly confirms it in the latest message.
 - When the user provides only ONE of the three, ask ONE guided follow-up to get a second parameter. With ≥2 parameters, return results.
 - Never invent prices, dates, or availability: use tool results only.
-- Prefer English. Keep answers compact, scannable (bullets).
+- Prefer English. Keep answers compact.
 - If a course can be Standard vs Refresher, confirm when ambiguous. For NEBOSH, ask "General or Construction?" when unclear.
 - If there are no exact matches, relax constraints in this order: date window → nearby/online → refresher/standard, and explain what you relaxed.
-- For each suggestion, show: Title, Dates (dates_list), Venue/Format, Price, Spaces, and [Book] link.
+- For each suggestion, show: Title (course only, no pipes), Dates (dates_list), Venue/Format, Price, Spaces, and a BOOK NOW link.
 - Default ranking: soonest → lowest price. Do not list duplicates.
 - Tone: friendly, efficient, solution-oriented.
 
@@ -81,102 +80,127 @@ function cleanQuery(s = "") {
     .replace(/\s+/g, " ")
     .trim();
 }
-
 function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
-
-function makeCourseLabelFromQC(qc) {
-  if (!qc) return "your requested course";
-  if (qc.exists && qc.normalizedFamily) return qc.normalizedFamily; // e.g., "SSSTS Refresher"
-  if (qc.recognizedFamily) return qc.refresherRequested ? `${qc.recognizedFamily} Refresher` : qc.recognizedFamily;
-  return "your requested course";
+function baseCourseTitle(full) {
+  if (!full) return "";
+  return String(full).split("|")[0].trim();
 }
 
-/* ---------- Renderers ---------- */
+/* ---------- HTML renderers (card UI) ---------- */
 
-function renderResultsText({ items, dateLabel, locationLabel }) {
-  const loc = locationLabel ? ` in ${capitalize(locationLabel)}` : "";
-  const when = dateLabel ? ` for ${dateLabel}` : "";
-  const header = `Here ${items.length === 1 ? "is" : "are"} ${items.length} option${items.length === 1 ? "" : "s"}${loc}${when}:`;
-  const lines = items.map((it, i) => {
-    const title = String(it.title || "").replace(/\s+\|\s*/g, " | ");
-    return `${i + 1}. **${title}**
-- **Dates:** ${it.dates}
-- **Venue/Format:** ${it.venueOrFormat}
-- **Price:** £${it.price}
-- **Spaces:** ${it.spaces}
-- [Book](${it.link})`;
-  });
-  return `${header}\n\n${lines.join("\n\n")}`;
+function escapeHtml(s = "") {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
-function renderZeroResultsText({ dateLabel, locationLabel, askedRefresher }) {
-  const where = locationLabel ? ` in ${capitalize(locationLabel)}` : "";
-  const when = dateLabel ? ` for ${dateLabel}` : " in the selected window";
-  const altOnline = `\n\nYou can try:\n- expanding the date window,\n- considering **nearby locations**,`;
-  const altVenue = `\n\nYou can try:\n- expanding the date window,\n- considering **online** options,`;
-  const altRef = askedRefresher
-    ? `\n- checking **Standard** (non-refresher) sessions.`
-    : `\n- or checking **Refresher** versions if applicable.`;
-  const alt = (locationLabel === "online" ? altOnline : altVenue) + altRef;
-  return `I couldn't find matching courses${where}${when}.${alt}`;
+function normalizeDatesText(s = "") {
+  // în JSON uneori vine cu "...\n..." (escape) sau newline real
+  return String(s)
+    .replace(/\\n/g, "<br>")  // backslash-n literal
+    .replace(/\n/g, "<br>");  // newline real
 }
 
-function renderVariantNotOffered({ recognizedFamily, suggestions = [] }) {
-  const sug = suggestions.slice(0, 3).map(s => `- ${s.label}`).join("\n")
-    || "- SMSTS (Standard / Refresher)\n- SSSTS (Standard / Refresher)\n- HSA / TWC / TWS";
-  return `The **${recognizedFamily} Refresher** course is not part of our catalogue.\n\nPerhaps you meant:\n${sug}`;
+function renderCardsHTML(items) {
+  const cards = items.map(it => {
+    const titleOnly = baseCourseTitle(it.title || "");
+    const title = escapeHtml(titleOnly);
+    const dates = normalizeDatesText(it.dates || ""); // <-- aici
+    const venue = escapeHtml(it.venueOrFormat || "Venue TBC");
+    const price = escapeHtml(`£${it.price ?? ""}`);
+    const spaces = escapeHtml(String(it.spaces ?? ""));
+    const link = String(it.link || "#");
+
+    return `
+      <div class="course-card">
+        <h3 class="course-title">${title}</h3>
+        <div class="course-meta">
+          <div><strong>Dates:</strong><br> ${dates}</div>
+          <div><strong>Venue:</strong> ${venue}</div>
+          <div><strong>Price:</strong> ${price}</div>
+          <div><strong>Spaces:</strong> ${spaces}</div>
+        </div>
+        <a href="${link}" target="_blank" rel="noopener" class="book-btn">BOOK NOW</a>
+      </div>
+    `;
+  }).join("");
+
+  return `<div class="cards-grid">${cards}</div>`;
 }
 
-function renderMissingFamily({ suggestions = [] }) {
-  const sug = suggestions.slice(0, 3).map(s => `- ${s.label}`).join("\n")
-    || "- SMSTS / SSSTS (Standard or Refresher)\n- HSA / TWC / TWS";
-  return `I couldn't identify a valid course from your message.\n\nYou could try:\n${sug}`;
+function renderHeaderHTML({ items, dateLabel, locationLabel }) {
+  const loc = locationLabel ? ` in ${escapeHtml(capitalize(locationLabel))}` : "";
+  const when = dateLabel ? ` for ${escapeHtml(dateLabel)}` : "";
+  return `<p class="result-header">Here ${items.length === 1 ? "is" : "are"} ${items.length} option${items.length === 1 ? "" : "s"}${loc}${when}:</p>`;
 }
 
-function renderDiagnosticsZero({ courseTerm, dateLabel, locationLabel, diag }) {
-  const loc = locationLabel ? ` in ${capitalize(locationLabel)}` : "";
-  const when = dateLabel ? ` for ${dateLabel}` : "";
+function renderResultsHTML({ items, dateLabel, locationLabel }) {
+  return `${renderHeaderHTML({ items, dateLabel, locationLabel })}${renderCardsHTML(items)}`;
+}
 
-  // normalize label to avoid "Refresher Refresher"
+function renderZeroResultsHTML({ dateLabel, locationLabel, askedRefresher }) {
+  const where = locationLabel ? ` in ${escapeHtml(capitalize(locationLabel))}` : "";
+  const when = dateLabel ? ` for ${escapeHtml(dateLabel)}` : " in the selected window";
+  const altOnline = `<ul class="tips"><li>Try expanding the date window</li><li>Consider <strong>nearby locations</strong></li>${askedRefresher ? "<li>Check <strong>Standard</strong> (non-refresher) sessions</li>" : "<li>Check <strong>Refresher</strong> versions if applicable</li>"}</ul>`;
+  const altVenue  = `<ul class="tips"><li>Try expanding the date window</li><li>Consider <strong>online</strong> options</li>${askedRefresher ? "<li>Check <strong>Standard</strong> (non-refresher) sessions</li>" : "<li>Check <strong>Refresher</strong> versions if applicable</li>"}</ul>`;
+  const alt = (locationLabel === "online") ? altOnline : altVenue;
+  return `<p>I couldn't find matching courses${where}${when}.</p>${alt}`;
+}
+
+function renderVariantNotOfferedHTML({ recognizedFamily, suggestions = [] }) {
+  const sug = suggestions.slice(0, 3).map(s => `<li>${escapeHtml(s.label)}</li>`).join("")
+    || `<li>SMSTS (Standard / Refresher)</li><li>SSSTS (Standard / Refresher)</li><li>HSA / TWC / TWS</li>`;
+  return `
+    <p>The <strong>${escapeHtml(recognizedFamily)} Refresher</strong> course is not part of our catalogue.</p>
+    <p>Perhaps you meant:</p>
+    <ul class="tips">${sug}</ul>
+  `;
+}
+
+function renderMissingFamilyHTML({ suggestions = [] }) {
+  const sug = suggestions.slice(0, 3).map(s => `<li>${escapeHtml(s.label)}</li>`).join("")
+    || `<li>SMSTS / SSSTS (Standard or Refresher)</li><li>HSA / TWC / TWS</li>`;
+  return `
+    <p>I couldn't identify a valid course from your message.</p>
+    <p>You could try:</p>
+    <ul class="tips">${sug}</ul>
+  `;
+}
+
+function renderDiagnosticsZeroHTML({ courseTerm, dateLabel, locationLabel, diag }) {
+  const loc = locationLabel ? ` in ${escapeHtml(capitalize(locationLabel))}` : "";
+  const when = dateLabel ? ` for ${escapeHtml(dateLabel)}` : "";
+
   let display = courseTerm || "your requested course";
   const hasRef = /\brefresher\b/i.test(display);
   if (diag?.refresher === true && !hasRef) display += " Refresher";
   if (diag?.refresher === false && hasRef) display = display.replace(/\s*refresher\b/i, "").trim();
 
-  const altOnline = `\n\nWould you like to expand your date window or consider **nearby locations**?`;
-  const altVenue  = `\n\nWould you like to expand your date window or consider **online** options?`;
+  const altOnline = `<p>Would you like to expand your date window or consider <strong>nearby locations</strong>?</p>`;
+  const altVenue  = `<p>Would you like to expand your date window or consider <strong>online</strong> options?</p>`;
   const altTail = (locationLabel === "online") ? altOnline : altVenue;
 
   if (diag && diag.hasAnyFamilyRef === false) {
-    return `I couldn't find **${display}** sessions anywhere at the moment.${altTail}`;
+    return `<p>I couldn't find <strong>${escapeHtml(display)}</strong> sessions anywhere at the moment.</p>${altTail}`;
   }
   if (diag && diag.hasInDateAnyLoc === false) {
     const best = (diag.nearestInLocation?.[0] || diag.nearestAnywhere?.[0]);
     if (best) {
-      return `No **${display}** sessions${when}${loc}. The next available is:
-- **${best.title}**
-  - **Dates:** ${best.dates}
-  - **Venue/Format:** ${best.venueOrFormat}
-  - **Price:** £${best.price}
-  - **Spaces:** ${best.spaces}
-  - [Book](${best.link})${altTail}`;
+      const cards = renderCardsHTML([best]);
+      return `<p>No <strong>${escapeHtml(display)}</strong> sessions${when}${loc}. The next available is:</p>${cards}${altTail}`;
     }
-    return `No **${display}** sessions${when}${loc}.${altTail}`;
+    return `<p>No <strong>${escapeHtml(display)}</strong> sessions${when}${loc}.</p>${altTail}`;
   }
   if (diag && diag.hasInLocAnyDate === false) {
     const best = diag.nearestAnywhere?.[0];
     if (best) {
-      return `No **${display}** sessions${when} in ${capitalize(locationLabel)}. The closest match elsewhere is:
-- **${best.title}**
-  - **Dates:** ${best.dates}
-  - **Venue/Format:** ${best.venueOrFormat}
-  - **Price:** £${best.price}
-  - **Spaces:** ${best.spaces}
-  - [Book](${best.link})${altTail}`;
+      const cards = renderCardsHTML([best]);
+      return `<p>No <strong>${escapeHtml(display)}</strong> sessions${when} in ${escapeHtml(capitalize(locationLabel))}. The closest match elsewhere is:</p>${cards}${altTail}`;
     }
-    return `No **${display}** sessions${when} in ${capitalize(locationLabel)}.${altTail}`;
+    return `<p>No <strong>${escapeHtml(display)}</strong> sessions${when} in ${escapeHtml(capitalize(locationLabel))}.</p>${altTail}`;
   }
-  return `No matching results${when}${loc}.${altTail}`;
+  return `<p>No matching results${when}${loc}.</p>${altTail}`;
 }
 
 /* ---------- Precise in-file search when QC is valid ---------- */
@@ -206,9 +230,7 @@ function mapItem(r) {
 function searchPrecisely(products, { normalizedFamily, refresherRequested, location, dateRange }) {
   let filtered = (products || []).filter(p => {
     const name = p?.name || "";
-    // family match uses normalizedFamily literal (e.g., "SSSTS Refresher")
     if (!isCourseMatchByFamily(name, normalizedFamily)) return false;
-    // refresher flag respected strictly if requested explicitly; if null -> allow both
     if (!isRefresherMatch(name, refresherRequested)) return false;
     if (dateRange && (dateRange.start || dateRange.end)) {
       if (!withinRange(p.start_date, [dateRange.start, dateRange.end])) return false;
@@ -268,10 +290,10 @@ async function toolRouter(tc) {
     const derivedLoc = detectUserLocationFromText(rq || "");
     const effectiveLocation = (derivedLoc !== null) ? derivedLoc : null;
 
-    // 4) If QC is valid and has normalized family → do precise in-file search (fixes Refresher bugs)
-    let items = searchPrecisely(products, {
+    // 4) Precise search using QC-normalized family / refresher flag
+    const items = searchPrecisely(products, {
       normalizedFamily: qc.normalizedFamily || qc.recognizedFamily || null,
-      refresherRequested: qc.refresherRequested, // true/false/null
+      refresherRequested: qc.refresherRequested,
       location: effectiveLocation,
       dateRange,
     });
@@ -350,7 +372,6 @@ export default async function handler(req, res) {
 
       const lastSearch = toolResults["search_courses"];
       if (lastSearch) {
-        // derive labels from latest user message
         let latestUser = "";
         for (let i = msgs.length - 1; i >= 0; i--) {
           if (msgs[i].role === "user" && typeof msgs[i].content === "string") { latestUser = msgs[i].content; break; }
@@ -360,24 +381,21 @@ export default async function handler(req, res) {
         const items = lastSearch.items || [];
         const qc = lastSearch.qc || null;
 
-        // invalid variant / missing family
         if (qc && qc.exists === false) {
           const reply = (qc.reason === "variant_not_offered")
-            ? renderVariantNotOffered({ recognizedFamily: qc.recognizedFamily, suggestions: qc.suggestions })
-            : renderMissingFamily({ suggestions: qc.suggestions });
+            ? renderVariantNotOfferedHTML({ recognizedFamily: qc.recognizedFamily, suggestions: qc.suggestions })
+            : renderMissingFamilyHTML({ suggestions: qc.suggestions });
           return res.status(200).json({ reply, toolResults });
         }
 
-        // results
         if (items.length > 0) {
-          const reply = renderResultsText({ items, dateLabel, locationLabel });
+          const reply = renderResultsHTML({ items, dateLabel, locationLabel });
           return res.status(200).json({ reply, toolResults });
         }
 
-        // zero results
-        const label = makeCourseLabelFromQC(qc);
+        const label = (qc && (qc.normalizedFamily || qc.recognizedFamily)) || "your requested course";
         if (lastSearch.diagnostics) {
-          const reply = renderDiagnosticsZero({
+          const reply = renderDiagnosticsZeroHTML({
             courseTerm: label,
             dateLabel,
             locationLabel,
@@ -386,7 +404,7 @@ export default async function handler(req, res) {
           return res.status(200).json({ reply, toolResults });
         } else {
           const askedRefresher = /\brefresher\b/i.test(cleanQuery(latestUser));
-          const reply = renderZeroResultsText({ dateLabel, locationLabel, askedRefresher });
+          const reply = renderZeroResultsHTML({ dateLabel, locationLabel, askedRefresher });
           return res.status(200).json({ reply, toolResults });
         }
       }
